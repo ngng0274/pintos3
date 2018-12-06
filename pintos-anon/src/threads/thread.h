@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include "threads/synch.h"
 
+#include <hash.h>
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -117,6 +119,9 @@ struct thread
 
     struct thread* parent;
     struct semaphore load_lock;
+
+
+    struct hash supt;
   };
 
 /* If false (default), use round-robin scheduler.

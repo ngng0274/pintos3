@@ -21,7 +21,7 @@
 #include "lib/stdio.h"
 
 #include "vm/frame.h"
-
+#include "vm/page.h"
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp, char** save_ptr, int argc);
 
@@ -85,6 +85,9 @@ start_process (void *file_name_)
 	char* file_name = strtok_r(file_name_, " ", &save_ptr);
 	struct intr_frame if_;
 	bool success;
+	
+	page_table_init(&thread_current()->supt);
+
 	/* Initialize interrupt frame and load executable. */
 	memset (&if_, 0, sizeof if_);
 	if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -170,6 +173,8 @@ process_exit (void)
 
 	sema_up(&(cur->child_lock));
 	sema_down(&(cur->mem_lock));
+
+	page_table_destroy(&cur->supt);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -369,8 +374,6 @@ done:
 
 /* load() helpers. */
 
-static bool install_page (void *upage, void *kpage, bool writable);
-
 /* Checks whether PHDR describes a valid, loadable segment in
    FILE and returns true if so, false otherwise. */
 	static bool
@@ -530,8 +533,7 @@ setup_stack (void **esp, char* file_name, char** save_ptr, int argc)
    with palloc_get_page().
    Returns true on success, false if UPAGE is already mapped or
    if memory allocation fails. */
-	static bool
-install_page (void *upage, void *kpage, bool writable)
+bool install_page (void *upage, void *kpage, bool writable)
 {
 	struct thread *t = thread_current ();
 
