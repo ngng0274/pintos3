@@ -261,16 +261,21 @@ int mmap (int fd, void *addr)
 	}
 
 	f = list_entry(e, struct file_, elem);
-	if(f->file_addr == NULL || addr == NULL || ((uint32_t) addr % PGSIZE) != 0)
+	if(f->file_addr == NULL || !is_user_vaddr(addr) || addr < ((void*) 0x08048000) || ((uint32_t) addr % PGSIZE) != 0)
 		return -1;
+
+	struct file* file = file_reopen(f->file_addr);
+	if(file == NULL || file_length(f->file_addr) == 0)
+		return -1;
+
 	thread_current()->mmap_count++;
 	int32_t ofs = 0;
-	uint32_t read_bytes = file_length(f->file_addr);
+	uint32_t read_bytes = file_length(file);
 	while (read_bytes > 0)
 	{
 		uint32_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 		uint32_t page_zero_bytes = PGSIZE - page_read_bytes;
-		if (!add_mmap(f, ofs, addr, page_read_bytes, page_zero_bytes))
+		if (!add_mmap(file, ofs, addr, page_read_bytes, page_zero_bytes))
 		{
 			munmap(thread_current()->mmap_count);
 			return -1;
@@ -299,174 +304,140 @@ syscall_handler (struct intr_frame *f)
 {
 	//printf("%d\n", *(uint32_t*) f->esp);
 
-	check_addr((const void*) f->esp);
+	check_addr((const void*) f->esp,(const void*) f->esp);
 
 	switch (*(uint32_t *)(f->esp)){
 		case SYS_HALT:
 			halt();
 			break;
 		case SYS_EXIT:
-			check_addr((const void*) f->esp+4);
+			check_addr((const void*) f->esp+4,(const void*) f->esp);
 			exit(*(uint32_t *)(f->esp + 4));
 			break;
 		case SYS_EXEC:
-			check_addr((const void*) f->esp+4);
-			check_string((const void*) f->esp+4);
+			check_addr((const void*) f->esp+4,(const void*) f->esp);
+			check_string((const void*) f->esp+4,(const void*) f->esp);
 			f->eax = exec((const char *)*(uint32_t *)(f->esp + 4));
 			break;
 		case SYS_WAIT:
-			check_addr((const void*) f->esp+4);
+			check_addr((const void*) f->esp+4,(const void*) f->esp);
 			f->eax = wait((pid_t)*(uint32_t *)(f->esp + 4));
 			break;
 		case SYS_CREATE:
-			check_addr((const void*) f->esp+16);
-			check_addr((const void*) f->esp+20);
-			check_string((const void*) f->esp+16);
+			check_addr((const void*) f->esp+16,(const void*) f->esp);
+			check_addr((const void*) f->esp+20,(const void*) f->esp);
+			check_string((const void*) f->esp+16,(const void*) f->esp);
 			f->eax = create((const char *)*(uint32_t *)(f->esp + 16), (unsigned)*(uint32_t *)(f->esp + 20));
 			break;
 		case SYS_REMOVE:
-			check_addr((const void*) f->esp+4);
-			check_string((const void*) f->esp+4);
+			check_addr((const void*) f->esp+4,(const void*) f->esp);
+			check_string((const void*) f->esp+4,(const void*) f->esp);
 			f->eax = remove((const char *)*(uint32_t *)(f->esp + 4));
 			break;
 		case SYS_OPEN:
-			check_addr((const void*) f->esp+4);
-			check_string((const void*) f->esp+4);
+			check_addr((const void*) f->esp+4,(const void*) f->esp);
+			check_string((const void*) f->esp+4,(const void*) f->esp);
 			f->eax = open((const char *)*(uint32_t *)(f->esp + 4));
 			break;
 		case SYS_FILESIZE:
-			check_addr((const void*) f->esp+4);
+			check_addr((const void*) f->esp+4,(const void*) f->esp);
 			f->eax = filesize((const char *)*(uint32_t *)(f->esp + 4));
 			break;
 		case SYS_READ:
-			check_addr((const void*) f->esp+20);
-			check_addr((const void*) f->esp+24);
-			check_addr((const void*) f->esp+28);
-			check_buffer((void *)*(uint32_t *)(f->esp + 24), (unsigned)*(uint32_t *)(f->esp + 28));
+			check_addr((const void*) f->esp+20,(const void*) f->esp);
+			check_addr((const void*) f->esp+24,(const void*) f->esp);
+			check_addr((const void*) f->esp+28,(const void*) f->esp);
+			check_buffer((void *)*(uint32_t *)(f->esp + 24), (unsigned)*(uint32_t *)(f->esp + 28),(const void*) f->esp, true);
 			f->eax = read((int)*(uint32_t *)(f->esp + 20), (void *)*(uint32_t *)(f->esp + 24), (unsigned)*(uint32_t *)(f->esp + 28));
 			break;
 		case SYS_WRITE:
-			check_addr((const void*) f->esp+20);
-			check_addr((const void*) f->esp+24);
-			check_addr((const void*) f->esp+28);
-			check_buffer((void *)*(uint32_t *)(f->esp + 24), (unsigned)*(uint32_t *)(f->esp + 28));
+			check_addr((const void*) f->esp+20,(const void*) f->esp);
+			check_addr((const void*) f->esp+24,(const void*) f->esp);
+			check_addr((const void*) f->esp+28,(const void*) f->esp);
+			check_buffer((void *)*(uint32_t *)(f->esp + 24), (unsigned)*(uint32_t *)(f->esp + 28),(const void*) f->esp, false);
 			f->eax = write((int)*(uint32_t *)(f->esp + 20), (void *)*(uint32_t *)(f->esp + 24), (unsigned)*(uint32_t *)(f->esp + 28));
 			break;
 		case SYS_SEEK:
-			check_addr((const void*) f->esp+16);
-			check_addr((const void*) f->esp+20);
+			check_addr((const void*) f->esp+16,(const void*) f->esp);
+			check_addr((const void*) f->esp+20,(const void*) f->esp);
 			seek((const char *)*(uint32_t *)(f->esp + 16), (unsigned)*(uint32_t *)(f->esp + 20));
 			break;
 		case SYS_TELL:
-			check_addr((const void*) f->esp+4);
+			check_addr((const void*) f->esp+4,(const void*) f->esp);
 			f->eax = tell((const char *)*(uint32_t *)(f->esp + 4));
 			break;
 		case SYS_CLOSE:
-			check_addr((const void*) f->esp+4);
+			check_addr((const void*) f->esp+4,(const void*) f->esp);
 			close((const char *)*(uint32_t *)(f->esp + 4));
 			break;
 		case SYS_MMAP:
-			check_addr((const void*) f->esp+16);
-			check_addr((const void*) f->esp+20);
+			check_addr((const void*) f->esp+16,(const void*) f->esp);
+			check_addr((const void*) f->esp+20,(const void*) f->esp);
 
-			f->eax = mmap((const char *)*(uint32_t *)(f->esp + 16), (unsigned)*(uint32_t *)(f->esp + 20));
+			f->eax = mmap((int)*(uint32_t *)(f->esp + 16), (void *)*(uint32_t *)(f->esp + 20));
 			break;
 		case SYS_MUNMAP:
-			check_addr((const void*) f->esp+4);
+			check_addr((const void*) f->esp+4,(const void*) f->esp);
 			munmap(*(uint32_t *)(f->esp + 4));
 			break;
 	} 
 }
 
-void check_addr(const void* vaddr)
+struct sup_entry* check_addr(const void* vaddr, void* esp)
 {
 	if(!is_user_vaddr(vaddr) || vaddr < ((void*) 0x08048000))
+	{
+	//	printf("\n1\n");
 		exit(-1);
+	}
+	bool load = false;
 	struct sup_entry* spte = find_spte((void*) vaddr);
 	if(spte == NULL)
+	{
+	//	printf("\n2\n");
 		exit(-1);
+	}
+
 	load_page(spte);
+
+	load = spte->loaded;
+
 	if(!spte->loaded)
+	{
+	//	printf("\n3\n");
 		exit(-1);
-}
-
-void check_buffer(void* buffer, unsigned size)
-{
-	char* buffer_ = (char*) buffer;
-	for(unsigned i = 0; i < size; i++)
-	{
-		check_addr((const void*) buffer_);
-		buffer_++;
-	}
-}
-
-void check_string(const void* str)
-{
-	while(*(char*) str != 0)
-	{
-		check_addr(str);
-		str = (char*) str+1;
-	}
-}
-
-
-void check_valid_buffer (void* buffer, unsigned size, void* esp, bool to_write)
-{
-	unsigned i;
-	char* local_buffer = (char *) buffer;
-
-	for (i = 0; i < size; i++)
-	{
-		struct sup_entry *spte = check_valid_ptr((const void*) local_buffer, esp);
-
-		if (spte && to_write)
-		{
-			if (!spte->writable)
-				exit(-1);
-		}
-		local_buffer++;
-	}
-}
-
-void check_valid_string (const void* str, void* esp)
-{
-	check_valid_ptr(str, esp);
-
-	while(* (char *) str != 0)
-	{
-		str = (char *) str + 1;
-		check_valid_ptr(str, esp);
-	}
-}
-
-void check_write_permission (struct sup_entry *spte)
-{
-	if (!spte->writable)
-		exit(-1);
-}
-
-struct sup_entry* check_valid_ptr (const void *vaddr, void* esp)
-{
-	if (!is_user_vaddr(vaddr) || vaddr < (void *) 0x08048000)
-		exit(-1);
-
-	bool load = false;
-
-	struct sup_entry *spte = find_spte((void *) vaddr);
-
-	if (spte)
-	{
-		load_page(spte);
-		load = spte->loaded;
 	}
 	else if (vaddr >= esp - 32)
-	{
-		load = page_stack_growth((void *) vaddr);
-	}
+		page_stack_growth((void *) vaddr);
 
 	if (!load)
 		exit(-1);
 
 	return spte;
-
 }
+
+void check_buffer(void* buffer, unsigned size, void* esp, bool to_write)
+{
+	char* buffer_ = (char*) buffer;
+	for(unsigned i = 0; i < size; i++)
+	{
+		struct sup_entry *spte = check_addr((const void*) buffer_, esp);
+
+		if (spte && to_write)
+			if (!spte->writable)
+				exit(-1);
+
+		buffer_++;
+	}
+}
+
+void check_string(const void* str, void* esp)
+{
+	while(*(char*) str != 0)
+	{
+		check_addr(str, esp);
+		str = (char*) str+1;
+	}
+}
+
+

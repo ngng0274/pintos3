@@ -164,14 +164,17 @@ bool add_mmap(struct file *file, int32_t offset, uint8_t *upage, uint32_t rbytes
 	}
 
         if(hash_insert(&thread_current()->supt, &spte->elem) == NULL)
-                return true;
-        else
+		return true;
+	else
+	{
+		spte->type = HASH_ERROR;
                 return false;
+	}
 }
 
 bool page_stack_growth (void* uaddr)
 {
-	if(PHYS_BASE - pg_round_down(uaddr) > STACK_MAX)
+	if((size_t) (PHYS_BASE - pg_round_down(uaddr)) > STACK_MAX)
 		return false;
 	struct sup_entry *spte = malloc(sizeof(struct sup_entry));
 	if(spte == NULL)

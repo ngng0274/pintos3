@@ -42,14 +42,8 @@ unsigned tell (int fd);
 void close (int fd);
 int mmap (int fd, void *addr);
 void munmap (int mapping);
-void check_addr(const void* vaddr);
-void check_buffer(void* buffer, unsigned size);
-void check_string(const void* str);
-
-
-struct sup_entry* check_valid_ptr (const void *vaddr, void* esp);
-void check_valid_buffer (void* buffer, unsigned size, void* esp, bool to_write);
-void check_valid_string (const void* str, void* esp);
-void check_write_permission (struct sup_entry *spte);
+struct sup_entry* check_addr(const void* vaddr, void* esp);
+void check_buffer(void* buffer, unsigned size, void* esp, bool to_write);
+void check_string(const void* str, void* esp);
 
 #endif /* userprog/syscall.h */

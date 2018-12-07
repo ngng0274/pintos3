@@ -32,7 +32,7 @@ void* frame_allocate(enum palloc_flags flags, struct sup_entry *spte) {
 	}
 	else{
 		//printf("\n3\n");
-		frame =frame_evict();
+		frame =frame_evict(flags, spte);
 		if(frame == NULL)
 			PANIC("can not evict");
 		struct frame_table_entry *fte = malloc(sizeof(struct frame_table_entry));
@@ -57,14 +57,17 @@ void frame_free(void *frame) {
 		{
 			list_remove(e);
 			free(fte);
+
+			palloc_free_page(frame);
+
 			break;
 		}
 	}
 	lock_release(&frame_lock);
-	palloc_free_page(frame);
+//	palloc_free_page(frame);
 }
 
-void* frame_evict() {
+void* frame_evict(enum palloc_flags flags, struct sup_entry *spte) {
 	lock_acquire(&frame_lock);
 
 	size_t size = list_size(&frame_table);
@@ -107,8 +110,15 @@ void* frame_evict() {
 			}
 		
 			fte->spte->loaded = false;
-		
-			return fte->frame;
+			
+			lock_release(&frame_lock);
+			struct sup_entry *rem_spte = fte->spte;
+			frame_free(fte->frame);
+			pagedir_clear_page(thread_current()->pagedir, rem_spte->page);
+
+			return frame_allocate(flags, spte);
+
+//			return fte->frame;
 		}
 		e = list_next(e);
 		if (e == list_end(&frame_table))
@@ -117,7 +127,7 @@ void* frame_evict() {
 
 	PANIC ("Can't evict any frame!! Not enough Memory!!\n");
 
-	lock_release(&frame_lock);
+//	lock_release(&frame_lock);
 
 	return NULL;
 }

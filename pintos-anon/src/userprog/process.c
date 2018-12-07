@@ -528,7 +528,7 @@ bool process_add_mmap(struct sup_entry *spte)
 {
 	struct mmap_file *mm = malloc(sizeof(struct mmap_file));
 
-	if(!mm)
+	if(mm == NULL)
 		return false;
 
 	mm->spte = spte;
@@ -543,7 +543,7 @@ void process_remove_mmap(int mapping)
 	struct thread *t = thread_current();
 	struct list_elem *next;
 	struct list_elem *e = list_begin(&t->mmap_list);
-
+	bool close = false;
 	while (e != list_end(&t->mmap_list))
 	{
 		next = list_next(e);
@@ -562,9 +562,14 @@ void process_remove_mmap(int mapping)
 				frame_free(pagedir_get_page(t->pagedir, mm->spte->page));
 				pagedir_clear_page(t->pagedir, mm->spte->page);
 			}
-
-			hash_delete(&t->supt, &mm->spte->elem);
+			if(mm->spte->type != HASH_ERROR)
+				hash_delete(&t->supt, &mm->spte->elem);
 			list_remove(&mm->elem);
+			if(!close)
+			{
+				file_close(mm->spte->file);
+				close = true;
+			}
 			free(mm->spte);
 			free(mm);
 		}
