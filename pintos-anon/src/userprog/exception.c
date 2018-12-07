@@ -150,13 +150,25 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
-  if (!user || is_kernel_vaddr(fault_addr))
-      exit(-1);
+ 
+  bool load = false;
+  if (not_present && is_user_vaddr(fault_addr))
+  {
+      	struct sup_entry *spte = find_spte(fault_addr);
+      	if (spte)
+	{
+	  load = load_page(spte);
+	}
+      	else if (fault_addr >= f->esp - 32)
+	{
+	  load = page_stack_growth(fault_addr);
+	}
+  }
 
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
-  if (!load_page(fault_addr))
+  if (!load)
   {
   	printf ("Page fault at %p: %s error %s page in %s context.\n",
         	fault_addr,

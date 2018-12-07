@@ -122,6 +122,8 @@ struct thread
 
 
     struct hash supt;
+    struct list mmap_list;
+    int mmap_count;
   };
 
 /* If false (default), use round-robin scheduler.

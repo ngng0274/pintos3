@@ -40,6 +40,10 @@ process_execute (const char *file_name)
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
+	if (is_user_vaddr(file_name))
+    	{
+      		file_name = pagedir_get_page(thread_current()->pagedir, file_name);
+    	}
 	char* save_ptr;
 	char file_name_[256];
 	strlcpy (file_name_, file_name, strlen(file_name) + 1);
@@ -174,6 +178,7 @@ process_exit (void)
 	sema_up(&(cur->child_lock));
 	sema_down(&(cur->mem_lock));
 
+	process_remove_mmap(-1);
 	page_table_destroy(&cur->supt);
 }
 
@@ -365,10 +370,9 @@ load (const char *file_name, void (**eip) (void), void **esp, char** save_ptr, i
 	*eip = (void (*) (void)) ehdr.e_entry;
 
 	success = true;
-
 done:
 	/* We arrive here whether the load is successful or not. */
-	file_close (file);
+	//file_close (file);
 	return success;
 }
 
@@ -450,29 +454,13 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-		/* Get a page of memory. */
-		uint8_t *kpage = frame_allocate (PAL_USER);
-		if (kpage == NULL)
-			return false;
-
-		/* Load this page. */
-		if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-		{
-			frame_free (kpage);
-			return false; 
-		}
-		memset (kpage + page_read_bytes, 0, page_zero_bytes);
-
-		/* Add the page to the process's address space. */
-		if (!install_page (upage, kpage, writable)) 
-		{
-			frame_free (kpage);
-			return false; 
-		}
+		if (!add_file(file, ofs, upage, page_read_bytes, page_zero_bytes, writable))
+	  		return false;
 
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
+		ofs += page_read_bytes;
 		upage += PGSIZE;
 	}
 	return true;
@@ -483,18 +471,13 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 	static bool
 setup_stack (void **esp, char* file_name, char** save_ptr, int argc) 
 {
-	uint8_t *kpage;
-	bool success = false;
-	kpage = frame_allocate (PAL_USER | PAL_ZERO);
-	if (kpage != NULL) 
+	bool success = page_stack_growth(((uint8_t*) PHYS_BASE) - PGSIZE);
+	if(success)
+		*esp = PHYS_BASE;
+	else
 	{
-		success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-		if (success)
-			*esp = PHYS_BASE;
-		else
-			frame_free (kpage);
+		return success;
 	}
-
 	int argument_number = 2;
 	char* argv[argc + 1];
 	char* token;
@@ -541,4 +524,54 @@ bool install_page (void *upage, void *kpage, bool writable)
 	   address, then map our page there. */
 	return (pagedir_get_page (t->pagedir, upage) == NULL
 			&& pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+bool process_add_mmap(struct sup_entry *spte)
+{
+	struct mmap_file *mm = malloc(sizeof(struct mmap_file));
+
+	if(!mm)
+		return false;
+
+	mm->spte = spte;
+	mm->mmap_count = thread_current()->mmap_count;
+	list_push_back(&thread_current()->mmap_list, &mm->elem);
+
+	return true;
+}
+
+void process_remove_mmap(int mapping)
+{
+	struct thread *t = thread_current();
+	struct list_elem *next;
+	struct list_elem *e = list_begin(&t->mmap_list);
+
+	while (e != list_end(&t->mmap_list))
+	{
+		next = list_next(e);
+
+		struct mmap_file *mm = list_entry (e, struct mmap_file, elem);
+
+		if (mm->mmap_count == mapping || mapping == -1)
+		{
+			if (mm->spte->loaded)
+			{
+				if (pagedir_is_dirty(t->pagedir, mm->spte->page))
+				{
+					file_write_at(mm->spte->file, mm->spte->page, mm->spte->read_bytes, mm->spte->offset);
+				}
+
+				frame_free(pagedir_get_page(t->pagedir, mm->spte->page));
+				pagedir_clear_page(t->pagedir, mm->spte->page);
+			}
+
+			hash_delete(&t->supt, &mm->spte->elem);
+			list_remove(&mm->elem);
+			free(mm->spte);
+			free(mm);
+		}
+
+		e = next;
+	}
+
 }

@@ -15,7 +15,7 @@
 #include "userprog/process.h"
 
 #include "vm/frame.h"
-
+#include "vm/swap.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -484,6 +484,8 @@ init_thread (struct thread *t, const char *name, int priority)
   /* Project 2 */
 
   /* Project 3 */
+  list_init(&(t->mmap_list));
+  t->mmap_count = 0;
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

@@ -1,12 +1,15 @@
 #include "vm/page.h"
 #include "vm/frame.h"
+#include "vm/swap.h"
 #include "threads/thread.h"
 #include "filesys/file.h"
 #include "threads/malloc.h"
 #include "threads/palloc.h"
 #include "threads/vaddr.h"
+#include "userprog/pagedir.h"
 #include "userprog/process.h"
 #include <string.h>
+#include <stdbool.h>
 
 unsigned page_table_hash(const struct hash_elem *e, void *aux UNUSED)
 {
@@ -26,7 +29,12 @@ bool compare(const struct hash_elem *a, const struct hash_elem *b, void *aux UNU
 void page_free(struct hash_elem *e, void *aux UNUSED)
 {
 	struct sup_entry *spte = hash_entry(e, struct sup_entry, elem);
-  	free(spte);
+	if(spte->loaded)
+	{
+		frame_free(pagedir_get_page(thread_current()->pagedir, spte->page));
+		pagedir_clear_page(thread_current()->pagedir, spte->page);
+	}
+	free(spte);
 }
 
 
@@ -47,14 +55,17 @@ struct sup_entry* find_spte(void* uaddr)
         struct hash_elem *e = hash_find(&thread_current()->supt, &spte.elem);
         if(e == NULL)
                 return NULL;
-        return hash_entry(e, struct sup_entry, elem);
+        
+	return hash_entry(e, struct sup_entry, elem);
 }
 
-bool load_page(void *uaddr)
+bool load_page(struct sup_entry *spte)
 {
-	struct sup_entry* spte = find_spte(uaddr);
-
 	bool success = false;
+
+	if (spte->loaded)
+		return success;
+
 	switch (spte->type)
 	{
 		case FILE:
@@ -64,7 +75,7 @@ bool load_page(void *uaddr)
 			success = load_swap(spte);
 			break;
 		case MMAP:
-			success = load_mmap(spte);
+			success = load_file(spte);
 			break;
 	}
 	return success;
@@ -72,10 +83,11 @@ bool load_page(void *uaddr)
 
 bool load_file(struct sup_entry *spte)
 {
-	void* addr = pagedir_get_page(thread_current()->pagedir, spte->page);
-	uint8_t *frame = frame_allocate(PAL_USER);
+	uint8_t *frame = frame_allocate(PAL_USER, spte);
 	if (frame == NULL)
+	{
 		return false;
+	}
 	if ((int) spte->read_bytes != file_read_at(spte->file, frame, spte->read_bytes, spte->offset))
 	{
 		frame_free(frame);
@@ -93,7 +105,17 @@ bool load_file(struct sup_entry *spte)
 
 bool load_swap(struct sup_entry *spte)
 {
-	return false;
+	uint8_t *frame = frame_allocate(PAL_USER, spte);
+	if (frame == NULL)
+                return false;
+	swap_in(spte->swap_index, frame);
+	if (!install_page(spte->page, frame, spte->writable))
+        {
+                frame_free(frame);
+                return false;
+        }
+        spte->loaded = true;
+        return true;
 }
 
  bool load_mmap(struct sup_entry *spte)
@@ -108,14 +130,72 @@ bool add_file(struct file *file, int32_t offset, uint8_t *upage, uint32_t rbytes
 		return false;
 	spte->file = file;
 	spte->offset = offset;
+	spte->page = upage;
 	spte->read_bytes = rbytes;
 	spte->zero_bytes = zbytes;
 	spte->writable = writable;
 	spte->loaded = false;
 	spte->type = FILE;
+	
 	if(hash_insert(&thread_current()->supt, &spte->elem) == NULL)
 		return true;
 	else
 		return false;
+	
 }
 
+bool add_mmap(struct file *file, int32_t offset, uint8_t *upage, uint32_t rbytes, uint32_t zbytes)
+{
+        struct sup_entry *spte = malloc(sizeof(struct sup_entry));
+        if(spte == NULL)
+                return false;
+        spte->file = file;
+        spte->offset = offset;
+        spte->page = upage;
+        spte->read_bytes = rbytes;
+        spte->zero_bytes = zbytes;
+        spte->writable = true;
+        spte->loaded = false;
+        spte->type = MMAP;
+	if(!process_add_mmap(spte))
+	{
+		free(spte);
+		return false;
+	}
+
+        if(hash_insert(&thread_current()->supt, &spte->elem) == NULL)
+                return true;
+        else
+                return false;
+}
+
+bool page_stack_growth (void* uaddr)
+{
+	if(PHYS_BASE - pg_round_down(uaddr) > STACK_MAX)
+		return false;
+	struct sup_entry *spte = malloc(sizeof(struct sup_entry));
+	if(spte == NULL)
+		return false;
+	spte->page = pg_round_down(uaddr);
+	spte->loaded = true;
+	spte->writable = true;
+	spte->type = SWAP;
+
+	void* frame = frame_allocate(PAL_USER, spte);
+	if(frame == NULL)
+	{
+		free(spte);
+		return false;
+	}
+	if (!install_page(spte->page, frame, spte->writable))
+    	{
+      		free(spte);
+      		frame_free(frame);
+      		return false;
+    	}
+	
+	if(hash_insert(&thread_current()->supt, &spte->elem) == NULL)
+                return true;
+        else
+                return false;
+}
