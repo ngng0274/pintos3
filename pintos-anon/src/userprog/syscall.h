@@ -2,8 +2,12 @@
 #define USERPROG_SYSCALL_H
 
 #include "threads/thread.h"
+#include "threads/interrupt.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+
+#include "vm/frame.h"
+#include "vm/page.h"
 
 typedef int pid_t;
 
@@ -41,4 +45,11 @@ void munmap (int mapping);
 void check_addr(const void* vaddr);
 void check_buffer(void* buffer, unsigned size);
 void check_string(const void* str);
+
+
+struct sup_entry* check_valid_ptr (const void *vaddr, void* esp);
+void check_valid_buffer (void* buffer, unsigned size, void* esp, bool to_write);
+void check_valid_string (const void* str, void* esp);
+void check_write_permission (struct sup_entry *spte);
+
 #endif /* userprog/syscall.h */

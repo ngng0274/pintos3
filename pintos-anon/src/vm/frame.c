@@ -12,11 +12,16 @@ void frame_init() {
 }
 
 void* frame_allocate(enum palloc_flags flags, struct sup_entry *spte) {
+
 	if((flags & PAL_USER) == 0)
+	{
+		//printf("\n1\n");
 		return NULL;
+	}
 	void *frame = palloc_get_page(flags);
 	if(frame)
 	{
+		//printf("\n2\n");
 		struct frame_table_entry *fte = malloc(sizeof(struct frame_table_entry));
   		fte->frame = frame;
   		fte->owner = thread_current();
@@ -26,6 +31,7 @@ void* frame_allocate(enum palloc_flags flags, struct sup_entry *spte) {
   		lock_release(&frame_lock);
 	}
 	else{
+		//printf("\n3\n");
 		frame =frame_evict();
 		if(frame == NULL)
 			PANIC("can not evict");
@@ -70,6 +76,7 @@ void* frame_evict() {
 	}
 
 	size_t itr;
+
 	struct list_elem *e = list_begin(&frame_table);
 
 	for(itr = 0; itr <= size + size; itr++)

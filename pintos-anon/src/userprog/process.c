@@ -40,10 +40,10 @@ process_execute (const char *file_name)
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
-	if (is_user_vaddr(file_name))
+	/*if (is_user_vaddr(file_name))
     	{
       		file_name = pagedir_get_page(thread_current()->pagedir, file_name);
-    	}
+    	}*/
 	char* save_ptr;
 	char file_name_[256];
 	strlcpy (file_name_, file_name, strlen(file_name) + 1);
@@ -157,7 +157,8 @@ process_exit (void)
 {
 	struct thread *cur = thread_current ();
 	uint32_t *pd;
-
+	process_remove_mmap(-1);
+	page_table_destroy(&cur->supt);
 	/* Destroy the current process's page directory and switch back
 	   to the kernel-only page directory. */
 	pd = cur->pagedir;
@@ -177,9 +178,6 @@ process_exit (void)
 
 	sema_up(&(cur->child_lock));
 	sema_down(&(cur->mem_lock));
-
-	process_remove_mmap(-1);
-	page_table_destroy(&cur->supt);
 }
 
 /* Sets up the CPU for running user code in the current

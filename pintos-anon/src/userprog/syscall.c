@@ -90,7 +90,6 @@ int write (int fd, const void *buffer, unsigned size)
 {
 	if(!is_user_vaddr(buffer))
 		exit(-1);
-
 	lock_acquire(&file_lock);
 	if (fd == 1) {
 		putbuf(buffer, size);
@@ -299,7 +298,9 @@ syscall_init (void)
 syscall_handler (struct intr_frame *f) 
 {
 	//printf("%d\n", *(uint32_t*) f->esp);
+
 	check_addr((const void*) f->esp);
+
 	switch (*(uint32_t *)(f->esp)){
 		case SYS_HALT:
 			halt();
@@ -406,4 +407,66 @@ void check_string(const void* str)
 		check_addr(str);
 		str = (char*) str+1;
 	}
+}
+
+
+void check_valid_buffer (void* buffer, unsigned size, void* esp, bool to_write)
+{
+	unsigned i;
+	char* local_buffer = (char *) buffer;
+
+	for (i = 0; i < size; i++)
+	{
+		struct sup_entry *spte = check_valid_ptr((const void*) local_buffer, esp);
+
+		if (spte && to_write)
+		{
+			if (!spte->writable)
+				exit(-1);
+		}
+		local_buffer++;
+	}
+}
+
+void check_valid_string (const void* str, void* esp)
+{
+	check_valid_ptr(str, esp);
+
+	while(* (char *) str != 0)
+	{
+		str = (char *) str + 1;
+		check_valid_ptr(str, esp);
+	}
+}
+
+void check_write_permission (struct sup_entry *spte)
+{
+	if (!spte->writable)
+		exit(-1);
+}
+
+struct sup_entry* check_valid_ptr (const void *vaddr, void* esp)
+{
+	if (!is_user_vaddr(vaddr) || vaddr < (void *) 0x08048000)
+		exit(-1);
+
+	bool load = false;
+
+	struct sup_entry *spte = find_spte((void *) vaddr);
+
+	if (spte)
+	{
+		load_page(spte);
+		load = spte->loaded;
+	}
+	else if (vaddr >= esp - 32)
+	{
+		load = page_stack_growth((void *) vaddr);
+	}
+
+	if (!load)
+		exit(-1);
+
+	return spte;
+
 }
