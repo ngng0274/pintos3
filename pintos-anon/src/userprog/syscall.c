@@ -430,7 +430,7 @@ struct sup_entry* check_addr(const void* vaddr, void* esp)
 	}
 */
 	else if (vaddr >= esp - 32)
-		page_stack_growth((void *) vaddr);
+		load = page_stack_growth((void *) vaddr);
 
 	if (!load)
 		exit(-1);

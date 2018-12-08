@@ -152,13 +152,13 @@ page_fault (struct intr_frame *f)
 	user = (f->error_code & PF_U) != 0;
 
 	if(not_present && is_user_vaddr(fault_addr) && fault_addr > (void*)(PHYS_BASE - (1 <<23)))
-        {
-                if(fault_addr < (f->esp - 32))
-                        exit(-1);
-                if(!page_stack_growth(fault_addr))
-                        PANIC("no grow stack!");
-                return;
-        }
+	{
+		if(fault_addr < (f->esp - 32))
+			exit(-1);
+		if(!page_stack_growth(fault_addr))
+			PANIC("no grow stack!");
+		return;
+	}
 	//load
 	if(not_present && is_user_vaddr(fault_addr) && fault_addr > (void *) 0x08048000)
 	{
@@ -178,18 +178,23 @@ page_fault (struct intr_frame *f)
 			return;
 		}
 	}
-	
+
 EXIT:
 	exit(-1);
+
+
 
 	/* To implement virtual memory, delete the rest of the function
 	   body, and replace it with code that brings in the page to
 	   which fault_addr refers. */
+
+
 	printf ("Page fault at %p: %s error %s page in %s context.\n",
 			fault_addr,
 			not_present ? "not present" : "rights violation",
 			write ? "writing" : "reading",
 			user ? "user" : "kernel");
 	kill (f);
+
 }
 
