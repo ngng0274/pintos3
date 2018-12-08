@@ -318,6 +318,9 @@ syscall_handler (struct intr_frame *f)
 			check_addr((const void*) f->esp+4,(const void*) f->esp);
 			check_string((const void*) f->esp+4,(const void*) f->esp);
 			f->eax = exec((const char *)*(uint32_t *)(f->esp + 4));
+
+			unpin_string((const void*) f->esp+4);
+
 			break;
 		case SYS_WAIT:
 			check_addr((const void*) f->esp+4,(const void*) f->esp);
@@ -328,6 +331,9 @@ syscall_handler (struct intr_frame *f)
 			check_addr((const void*) f->esp+20,(const void*) f->esp);
 			check_string((const void*) f->esp+16,(const void*) f->esp);
 			f->eax = create((const char *)*(uint32_t *)(f->esp + 16), (unsigned)*(uint32_t *)(f->esp + 20));
+
+			unpin_string((const void*) f->esp+16);
+			
 			break;
 		case SYS_REMOVE:
 			check_addr((const void*) f->esp+4,(const void*) f->esp);
@@ -338,6 +344,9 @@ syscall_handler (struct intr_frame *f)
 			check_addr((const void*) f->esp+4,(const void*) f->esp);
 			check_string((const void*) f->esp+4,(const void*) f->esp);
 			f->eax = open((const char *)*(uint32_t *)(f->esp + 4));
+
+			unpin_string((const void*) f->esp+4);
+
 			break;
 		case SYS_FILESIZE:
 			check_addr((const void*) f->esp+4,(const void*) f->esp);
@@ -349,6 +358,9 @@ syscall_handler (struct intr_frame *f)
 			check_addr((const void*) f->esp+28,(const void*) f->esp);
 			check_buffer((void *)*(uint32_t *)(f->esp + 24), (unsigned)*(uint32_t *)(f->esp + 28),(const void*) f->esp, true);
 			f->eax = read((int)*(uint32_t *)(f->esp + 20), (void *)*(uint32_t *)(f->esp + 24), (unsigned)*(uint32_t *)(f->esp + 28));
+
+			unpin_buffer((void *)*(uint32_t *)(f->esp + 24), (unsigned)*(uint32_t *)(f->esp + 28));
+
 			break;
 		case SYS_WRITE:
 			check_addr((const void*) f->esp+20,(const void*) f->esp);
@@ -356,6 +368,9 @@ syscall_handler (struct intr_frame *f)
 			check_addr((const void*) f->esp+28,(const void*) f->esp);
 			check_buffer((void *)*(uint32_t *)(f->esp + 24), (unsigned)*(uint32_t *)(f->esp + 28),(const void*) f->esp, false);
 			f->eax = write((int)*(uint32_t *)(f->esp + 20), (void *)*(uint32_t *)(f->esp + 24), (unsigned)*(uint32_t *)(f->esp + 28));
+
+			unpin_buffer((void *)*(uint32_t *)(f->esp + 24), (unsigned)*(uint32_t *)(f->esp + 28));
+
 			break;
 		case SYS_SEEK:
 			check_addr((const void*) f->esp+16,(const void*) f->esp);
@@ -381,6 +396,8 @@ syscall_handler (struct intr_frame *f)
 			munmap(*(uint32_t *)(f->esp + 4));
 			break;
 	} 
+
+	unpin_addr((const void*) f->esp);
 }
 
 struct sup_entry* check_addr(const void* vaddr, void* esp)
@@ -392,21 +409,26 @@ struct sup_entry* check_addr(const void* vaddr, void* esp)
 	}
 	bool load = false;
 	struct sup_entry* spte = find_spte((void*) vaddr);
+/*
 	if(spte == NULL)
 	{
 	//	printf("\n2\n");
 		exit(-1);
 	}
+*/
+	if (spte)
+	{	
+		load_page(spte);
 
-	load_page(spte);
-
-	load = spte->loaded;
-
+		load = spte->loaded;
+	}
+/*
 	if(!spte->loaded)
 	{
 	//	printf("\n3\n");
 		exit(-1);
 	}
+*/
 	else if (vaddr >= esp - 32)
 		page_stack_growth((void *) vaddr);
 
@@ -440,4 +462,27 @@ void check_string(const void* str, void* esp)
 	}
 }
 
+void unpin_addr(void* vaddr)
+{
+	struct sup_entry *spte = find_spte(vaddr);
+	if (spte)
+		spte->pin = false;
+}
 
+void unpin_string(void* str)
+{
+	unpin_addr(str);
+
+	for(str; * (char *) str != 0; str = (char *) str + 1)
+		unpin_addr(str);
+}
+
+void unpin_buffer(void* buffer, unsigned size)
+{
+	unsigned i;
+
+	char* local_buffer = (char *) buffer;
+
+	for (i = 0; i < size; i++, local_buffer++)
+		unpin_addr(local_buffer);
+}

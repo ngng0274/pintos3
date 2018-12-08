@@ -46,4 +46,9 @@ struct sup_entry* check_addr(const void* vaddr, void* esp);
 void check_buffer(void* buffer, unsigned size, void* esp, bool to_write);
 void check_string(const void* str, void* esp);
 
+
+void unpin_addr(void* vaddr);
+void unpin_string(void* str);
+void unpin_buffer(void* buffer, unsigned size);
+
 #endif /* userprog/syscall.h */

@@ -152,29 +152,33 @@ page_fault (struct intr_frame *f)
 	user = (f->error_code & PF_U) != 0;
 
 	if(not_present && is_user_vaddr(fault_addr) && fault_addr > (void*)(PHYS_BASE - (1 <<23)))
-	{
-		if(fault_addr < (f->esp - 32))
-			exit(-1);
-		if(!page_stack_growth(fault_addr))
-			PANIC("grow stack failed!\n");
-		return;
-	}
+        {
+                if(fault_addr < (f->esp - 32))
+                        exit(-1);
+                if(!page_stack_growth(fault_addr))
+                        PANIC("no grow stack!");
+                return;
+        }
 	//load
 	if(not_present && is_user_vaddr(fault_addr) && fault_addr > (void *) 0x08048000)
 	{
-		struct sup_entry* s;
+		struct sup_entry* spte;
 		bool success;
-		s = find_spte(fault_addr);
-		if(s == NULL)
+		spte = find_spte(fault_addr);
+		if(spte == NULL)
 			goto EXIT;
-		if(s->type == FILE || s->type == MMAP)
+		else
+			spte->pin = false;
+
+		if(spte->type == FILE || spte->type == MMAP)
 		{
-			success = load_file(s);
+			success = load_file(spte);
 			if(!success)
 				PANIC("NOT success in load_from_file\n");
 			return;
 		}
 	}
+	
 EXIT:
 	exit(-1);
 

@@ -19,7 +19,7 @@
 #include "threads/malloc.h"
 #include "threads/vaddr.h"
 #include "lib/stdio.h"
-
+#include "userprog/syscall.h"
 #include "vm/frame.h"
 #include "vm/page.h"
 static thread_func start_process NO_RETURN;
@@ -41,9 +41,9 @@ process_execute (const char *file_name)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
 	/*if (is_user_vaddr(file_name))
-    	{
-      		file_name = pagedir_get_page(thread_current()->pagedir, file_name);
-    	}*/
+	  {
+	  file_name = pagedir_get_page(thread_current()->pagedir, file_name);
+	  }*/
 	char* save_ptr;
 	char file_name_[256];
 	strlcpy (file_name_, file_name, strlen(file_name) + 1);
@@ -60,7 +60,7 @@ process_execute (const char *file_name)
 		palloc_free_page (fn_copy); 
 
 	if(list_empty(&thread_current()->child_list))
-                return tid;
+		return tid;
 
 	struct list_elem* e;
 	struct thread* t;
@@ -89,7 +89,7 @@ start_process (void *file_name_)
 	char* file_name = strtok_r(file_name_, " ", &save_ptr);
 	struct intr_frame if_;
 	bool success;
-	
+
 	page_table_init(&thread_current()->supt);
 
 	/* Initialize interrupt frame and load executable. */
@@ -453,7 +453,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		if (!add_file(file, ofs, upage, page_read_bytes, page_zero_bytes, writable))
-	  		return false;
+			return false;
 
 		/* Advance. */
 		read_bytes -= page_read_bytes;
@@ -543,7 +543,8 @@ void process_remove_mmap(int mapping)
 	struct thread *t = thread_current();
 	struct list_elem *next;
 	struct list_elem *e = list_begin(&t->mmap_list);
-	bool close = false;
+	struct file *f = NULL;
+	int close = 0;
 	while (e != list_end(&t->mmap_list))
 	{
 		next = list_next(e);
@@ -551,12 +552,15 @@ void process_remove_mmap(int mapping)
 		struct mmap_file *mm = list_entry (e, struct mmap_file, elem);
 
 		if (mm->mmap_count == mapping || mapping == -1)
-		{
+		{	
+			mm->spte->pin =true;
 			if (mm->spte->loaded)
 			{
 				if (pagedir_is_dirty(t->pagedir, mm->spte->page))
 				{
+					lock_acquire(&file_lock);
 					file_write_at(mm->spte->file, mm->spte->page, mm->spte->read_bytes, mm->spte->offset);
+					lock_release(&file_lock);
 				}
 
 				frame_free(pagedir_get_page(t->pagedir, mm->spte->page));
@@ -565,10 +569,16 @@ void process_remove_mmap(int mapping)
 			if(mm->spte->type != HASH_ERROR)
 				hash_delete(&t->supt, &mm->spte->elem);
 			list_remove(&mm->elem);
-			if(!close)
+			if(mm->mmap_count != close)
 			{
-				file_close(mm->spte->file);
-				close = true;
+				if(f)
+				{
+					lock_acquire(&file_lock);
+					file_close(f);
+					lock_release(&file_lock);
+				}
+				close = mm->mmap_count;
+				f =mm->spte->file;
 			}
 			free(mm->spte);
 			free(mm);
@@ -576,5 +586,10 @@ void process_remove_mmap(int mapping)
 
 		e = next;
 	}
-
+	if(f)
+	{
+		lock_acquire(&file_lock);
+                file_close(f);
+                lock_release(&file_lock);
+	}
 }

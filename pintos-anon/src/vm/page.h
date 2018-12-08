@@ -15,6 +15,7 @@ struct sup_entry
 	void *page;
 
 	bool writable;
+	bool pin;
 	bool loaded;
 
 	struct file *file;

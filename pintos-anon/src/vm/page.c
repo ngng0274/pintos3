@@ -8,6 +8,7 @@
 #include "threads/vaddr.h"
 #include "userprog/pagedir.h"
 #include "userprog/process.h"
+#include "userprog/syscall.h"
 #include <string.h>
 #include <stdbool.h>
 
@@ -63,6 +64,8 @@ bool load_page(struct sup_entry *spte)
 {
 	bool success = false;
 
+	spte->pin = true;
+
 	if (spte->loaded)
 		return success;
 
@@ -83,22 +86,39 @@ bool load_page(struct sup_entry *spte)
 
 bool load_file(struct sup_entry *spte)
 {
+	enum palloc_flags flags = PAL_USER;
+
+	if (spte->read_bytes == 0)
+		flags |= PAL_ZERO;
+
 	uint8_t *frame = frame_allocate(PAL_USER, spte);
-	if (frame == NULL)
+
+	if (!frame)
 	{
 		return false;
 	}
-	if ((int) spte->read_bytes != file_read_at(spte->file, frame, spte->read_bytes, spte->offset))
+	
+	if (spte->read_bytes > 0)
 	{
-		frame_free(frame);
-		return false;
+		lock_acquire(&file_lock);
+		
+		if ((int) spte->read_bytes != file_read_at(spte->file, frame, spte->read_bytes, spte->offset))
+		{
+			lock_release(&file_lock);
+			frame_free(frame);
+			return false;
+		}
+		lock_release(&file_lock);
+
+		memset(frame + spte->read_bytes, 0, spte->zero_bytes);
 	}
-	memset(frame + spte->read_bytes, 0, spte->zero_bytes);
+
 	if (!install_page(spte->page, frame, spte->writable))
 	{
 		frame_free(frame);
 		return false;
 	}
+
   	spte->loaded = true;
 	return true;
 }
@@ -108,12 +128,15 @@ bool load_swap(struct sup_entry *spte)
 	uint8_t *frame = frame_allocate(PAL_USER, spte);
 	if (frame == NULL)
                 return false;
-	swap_in(spte->swap_index, frame);
+
 	if (!install_page(spte->page, frame, spte->writable))
         {
                 frame_free(frame);
                 return false;
         }
+
+	swap_in(spte->swap_index, frame);
+
         spte->loaded = true;
         return true;
 }
@@ -136,6 +159,7 @@ bool add_file(struct file *file, int32_t offset, uint8_t *upage, uint32_t rbytes
 	spte->writable = writable;
 	spte->loaded = false;
 	spte->type = FILE;
+	spte->pin = false;
 	
 	if(hash_insert(&thread_current()->supt, &spte->elem) == NULL)
 		return true;
@@ -157,6 +181,8 @@ bool add_mmap(struct file *file, int32_t offset, uint8_t *upage, uint32_t rbytes
         spte->writable = true;
         spte->loaded = false;
         spte->type = MMAP;
+	spte->pin = false;
+
 	if(!process_add_mmap(spte))
 	{
 		free(spte);
@@ -175,27 +201,41 @@ bool add_mmap(struct file *file, int32_t offset, uint8_t *upage, uint32_t rbytes
 bool page_stack_growth (void* uaddr)
 {
 	if((size_t) (PHYS_BASE - pg_round_down(uaddr)) > STACK_MAX)
+	{
+//		printf("\nDEBUG 00 : grow stack failed by over STACK_MAX\n\n");
 		return false;
+	}
 	struct sup_entry *spte = malloc(sizeof(struct sup_entry));
 	if(spte == NULL)
+	{
+//		printf("\nDEBUG 01 : grow stack failed by NULL spte\n\n");
 		return false;
+	}
 	spte->page = pg_round_down(uaddr);
 	spte->loaded = true;
 	spte->writable = true;
 	spte->type = SWAP;
 
+	spte->pin = true;
+
 	void* frame = frame_allocate(PAL_USER, spte);
 	if(frame == NULL)
 	{
 		free(spte);
+//		printf("\nDEBUG 02  : \n\n");
 		return false;
 	}
 	if (!install_page(spte->page, frame, spte->writable))
     	{
       		free(spte);
       		frame_free(frame);
+
+//		printf("\nDEBUG 03 : \n\n");
       		return false;
     	}
+
+	if (intr_context())
+		spte->pin = false;
 	
 	if(hash_insert(&thread_current()->supt, &spte->elem) == NULL)
                 return true;

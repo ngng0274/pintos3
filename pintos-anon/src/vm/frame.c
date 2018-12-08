@@ -31,8 +31,11 @@ void* frame_allocate(enum palloc_flags flags, struct sup_entry *spte) {
   		lock_release(&frame_lock);
 	}
 	else{
-		//printf("\n3\n");
-		frame =frame_evict(flags, spte);
+		while(frame == NULL)
+		{
+			frame =frame_evict(flags);
+			lock_release(&frame_lock);
+		}
 		if(frame == NULL)
 			PANIC("can not evict");
 		struct frame_table_entry *fte = malloc(sizeof(struct frame_table_entry));
@@ -67,14 +70,14 @@ void frame_free(void *frame) {
 //	palloc_free_page(frame);
 }
 
-void* frame_evict(enum palloc_flags flags, struct sup_entry *spte) {
+void* frame_evict(enum palloc_flags flags) {
+
 	lock_acquire(&frame_lock);
 
 	size_t size = list_size(&frame_table);
 	if (size == 0)	
 	{
 		PANIC ("Frame Table is Empty!!\n");
-		lock_require(&frame_lock);
 		return NULL;
 	}
 
@@ -87,14 +90,14 @@ void* frame_evict(enum palloc_flags flags, struct sup_entry *spte) {
 		struct frame_table_entry *fte = list_entry(e, struct frame_table_entry, elem);
 		struct thread *t = fte->owner;
 	
-	/*	if (fte->pin)
+		if (fte->spte->pin)
 		{	
 			e = list_next(e);			
 			if (e == list_end(&frame_table))
 				e = list_begin(&frame_table);
 	
 			continue;
-		} */
+		} 
 		
 		if (pagedir_is_accessed(t->pagedir, fte->spte->page))
 		{	
@@ -106,17 +109,25 @@ void* frame_evict(enum palloc_flags flags, struct sup_entry *spte) {
 		else{	
 			if (pagedir_is_dirty(t->pagedir, fte->spte->page) || fte->spte->type == SWAP)
 			{
-				fte->spte->swap_index = swap_out(fte->frame);
+				if(fte->spte->type == MMAP)
+				{
+					lock_acquire(&file_lock);
+					file_write_at(fte->spte->file, fte->frame, fte->spte->read_bytes, fte->spte->offset);
+					lock_release(&file_lock);
+				}
+				else
+				{
+					fte->spte->type = SWAP;
+					fte->spte->swap_index = swap_out(fte->frame);
+				}
 			}
 		
 			fte->spte->loaded = false;
-			
-			lock_release(&frame_lock);
-			struct sup_entry *rem_spte = fte->spte;
-			frame_free(fte->frame);
-			pagedir_clear_page(thread_current()->pagedir, rem_spte->page);
-
-			return frame_allocate(flags, spte);
+			list_remove(&fte->elem);
+			pagedir_clear_page(t->pagedir, fte->spte->page);
+			palloc_free_page(fte->frame);
+			free(fte);
+			return palloc_get_page(flags);
 
 //			return fte->frame;
 		}
