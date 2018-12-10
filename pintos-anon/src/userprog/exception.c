@@ -151,9 +151,8 @@ page_fault (struct intr_frame *f)
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
 	
-	if(is_kernel_vaddr(fault_addr) && user){
+	if(is_kernel_vaddr(fault_addr) && user)
 		exit(-1);
-	}
 	/*
 	   if(not_present && is_user_vaddr(fault_addr) && fault_addr > (void*)(PHYS_BASE - (1 <<23)))
 	   {

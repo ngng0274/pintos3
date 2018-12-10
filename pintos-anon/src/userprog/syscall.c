@@ -302,7 +302,6 @@ syscall_init (void)
 	static void
 syscall_handler (struct intr_frame *f) 
 {
-	//printf("%d\n", *(uint32_t*) f->esp);
 
 	check_addr((const void*) f->esp,(const void*) f->esp);
 
@@ -318,7 +317,7 @@ syscall_handler (struct intr_frame *f)
 			check_addr((const void*) f->esp+4,(const void*) f->esp);
 			check_string((const void*) f->esp+4,(const void*) f->esp);
 			f->eax = exec((const char *)*(uint32_t *)(f->esp + 4));
-			unpin_string((const void*) f->esp+4);
+			unpin_string((void*) f->esp+4);
 			break;
 		case SYS_WAIT:
 			check_addr((const void*) f->esp+4,(const void*) f->esp);
@@ -329,7 +328,7 @@ syscall_handler (struct intr_frame *f)
 			check_addr((const void*) f->esp+20,(const void*) f->esp);
 			check_string((const void*) f->esp+16,(const void*) f->esp);
 			f->eax = create((const char *)*(uint32_t *)(f->esp + 16), (unsigned)*(uint32_t *)(f->esp + 20));
-			unpin_string((const void*) f->esp+16);
+			unpin_string((void*) f->esp+16);
 			
 			break;
 		case SYS_REMOVE:
@@ -341,7 +340,7 @@ syscall_handler (struct intr_frame *f)
 			check_addr((const void*) f->esp+4,(const void*) f->esp);
 			check_string((const void*) f->esp+4,(const void*) f->esp);
 			f->eax = open((const char *)*(uint32_t *)(f->esp + 4));
-			unpin_string((const void*) f->esp+4);
+			unpin_string((void*) f->esp+4);
 			break;
 		case SYS_FILESIZE:
 			check_addr((const void*) f->esp+4,(const void*) f->esp);
@@ -388,7 +387,7 @@ syscall_handler (struct intr_frame *f)
 			munmap(*(uint32_t *)(f->esp + 4));
 			break;
 	}
-	unpin_addr((const void*) f->esp);
+	unpin_addr(f->esp);
 }
 
 struct sup_entry* check_addr(const void* vaddr, void* esp)
@@ -430,12 +429,19 @@ void check_buffer(void* buffer, unsigned size, void* esp, bool to_write)
 }
 
 void check_string(const void* str, void* esp)
-{
+{	/*
 	while(*(char*) str != 0)
 	{
 		check_addr(str, esp);
 		str = (char*) str+1;
 	}
+	*/
+	check_addr(str, esp);
+  while (* (char *) str != 0)
+    {
+      str = (char *) str + 1;
+      check_addr(str, esp);
+    }
 }
 
 void unpin_addr(void* vaddr)
@@ -448,7 +454,6 @@ void unpin_addr(void* vaddr)
 void unpin_string(void* str)
 {
 	unpin_addr(str);
-
 	for(str; * (char *) str != 0; str = (char *) str + 1)
 		unpin_addr(str);
 }

@@ -14,14 +14,10 @@ void frame_init() {
 void* frame_allocate(enum palloc_flags flags, struct sup_entry *spte) {
 
 	if((flags & PAL_USER) == 0)
-	{
-		//printf("\n1\n");
 		return NULL;
-	}
 	void *frame = palloc_get_page(flags);
 	if(frame)
 	{
-		//printf("\n2\n");
 		struct frame_table_entry *fte = malloc(sizeof(struct frame_table_entry));
 		fte->frame = frame;
 		fte->owner = thread_current();
@@ -67,7 +63,6 @@ void frame_free(void *frame) {
 		}
 	}
 	lock_release(&frame_lock);
-	//	palloc_free_page(frame);
 }
 
 void* frame_evict(enum palloc_flags flags) {
@@ -158,15 +153,12 @@ void* frame_evict(enum palloc_flags flags) {
 			}
 			else
 			{
-				if (pagedir_is_dirty(t->pagedir, fte->spte->page) ||
-						fte->spte->type == SWAP)
+				if (pagedir_is_dirty(t->pagedir, fte->spte->page) || fte->spte->type == SWAP)
 				{
 					if (fte->spte->type == MMAP)
 					{
 						lock_acquire(&file_lock);
-						file_write_at(fte->spte->file, fte->frame,
-								fte->spte->read_bytes,
-								fte->spte->offset);
+						file_write_at(fte->spte->file, fte->frame, fte->spte->read_bytes, fte->spte->offset);
 						lock_release(&file_lock);
 					}
 					else

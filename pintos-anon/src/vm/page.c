@@ -93,10 +93,8 @@ bool load_file(struct sup_entry *spte)
 
 	uint8_t *frame = frame_allocate(PAL_USER, spte);
 
-	if (!frame)
-	{
+	if (frame == NULL)
 		return false;
-	}
 	
 	if (spte->read_bytes > 0)
 	{
@@ -201,36 +199,26 @@ bool add_mmap(struct file *file, int32_t offset, uint8_t *upage, uint32_t rbytes
 bool page_stack_growth (void* uaddr)
 {
 	if((size_t) (PHYS_BASE - pg_round_down(uaddr)) > STACK_MAX)
-	{
-//		printf("\nDEBUG 00 : grow stack failed by over STACK_MAX\n\n");
 		return false;
-	}
 	struct sup_entry *spte = malloc(sizeof(struct sup_entry));
 	if(spte == NULL)
-	{
-//		printf("\nDEBUG 01 : grow stack failed by NULL spte\n\n");
 		return false;
-	}
 	spte->page = pg_round_down(uaddr);
 	spte->loaded = true;
 	spte->writable = true;
 	spte->type = SWAP;
-
 	spte->pin = true;
 
 	void* frame = frame_allocate(PAL_USER, spte);
 	if(frame == NULL)
 	{
 		free(spte);
-//		printf("\nDEBUG 02  : \n\n");
 		return false;
 	}
 	if (!install_page(spte->page, frame, spte->writable))
     	{
       		free(spte);
       		frame_free(frame);
-
-//		printf("\nDEBUG 03 : \n\n");
       		return false;
     	}
 
