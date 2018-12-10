@@ -150,47 +150,12 @@ page_fault (struct intr_frame *f)
 	not_present = (f->error_code & PF_P) == 0;
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;
-	
+
 	if(is_kernel_vaddr(fault_addr) && user)
 		exit(-1);
-	/*
-	   if(not_present && is_user_vaddr(fault_addr) && fault_addr > (void*)(PHYS_BASE - (1 <<23)))
-	   {
-	   if(fault_addr < (f->esp - 32))
-	   exit(-1);
-	   if(!page_stack_growth(fault_addr))
-	   PANIC("no grow stack!");
-	   return;
-	   }
-	//load
-	if(not_present && is_user_vaddr(fault_addr) && fault_addr > (void *) 0x08048000)
-	{
-	struct sup_entry* spte;
-	bool success;
-	spte = find_spte(fault_addr);
-	if(spte == NULL)
-	goto EXIT;
-	else
-	spte->pin = false;
-
-	if(spte->type == FILE || spte->type == MMAP)
-	{
-	success = load_file(spte);
-	if(!success)
-	PANIC("NOT success in load_from_file\n");
-	return;
-	}
-	}
-
-EXIT:
-	//	printf("111\n");
-	*/
-
-
-//	printf("fault addr: %p\n", fault_addr);
 
 	bool load = false;
-	if (not_present && fault_addr > 0x08048000 && is_user_vaddr(fault_addr))
+	if (not_present && fault_addr > (void *) 0x08048000 && is_user_vaddr(fault_addr))
 	{
 		struct sup_entry *spte = find_spte(fault_addr);
 		if (spte)

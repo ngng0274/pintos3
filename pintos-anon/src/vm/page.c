@@ -69,18 +69,12 @@ bool load_page(struct sup_entry *spte)
 	if (spte->loaded)
 		return success;
 
-	switch (spte->type)
-	{
-		case FILE:
-			success = load_file(spte);
-			break;
-		case SWAP:
-			success = load_swap(spte);
-			break;
-		case MMAP:
-			success = load_file(spte);
-			break;
-	}
+	if(spte->type == SWAP)
+		success = load_swap(spte);
+	else
+		success = load_file(spte);
+
+	spte->loaded = true;
 	return success;
 }
 
@@ -106,8 +100,8 @@ bool load_file(struct sup_entry *spte)
 			frame_free(frame);
 			return false;
 		}
-		lock_release(&file_lock);
 
+		lock_release(&file_lock);
 		memset(frame + spte->read_bytes, 0, spte->zero_bytes);
 	}
 
@@ -117,7 +111,6 @@ bool load_file(struct sup_entry *spte)
 		return false;
 	}
 
-  	spte->loaded = true;
 	return true;
 }
 
@@ -134,14 +127,7 @@ bool load_swap(struct sup_entry *spte)
         }
 
 	swap_in(spte->swap_index, spte->page);
-
-        spte->loaded = true;
         return true;
-}
-
- bool load_mmap(struct sup_entry *spte)
-{
-	return false;
 }
 
 bool add_file(struct file *file, int32_t offset, uint8_t *upage, uint32_t rbytes, uint32_t zbytes, bool writable)
@@ -149,6 +135,7 @@ bool add_file(struct file *file, int32_t offset, uint8_t *upage, uint32_t rbytes
 	struct sup_entry *spte = malloc(sizeof(struct sup_entry));
 	if(spte == NULL)
 		return false;
+	spte->destroy = false;
 	spte->file = file;
 	spte->offset = offset;
 	spte->page = upage;
@@ -171,6 +158,7 @@ bool add_mmap(struct file *file, int32_t offset, uint8_t *upage, uint32_t rbytes
         struct sup_entry *spte = malloc(sizeof(struct sup_entry));
         if(spte == NULL)
                 return false;
+	spte->destroy = false;
         spte->file = file;
         spte->offset = offset;
         spte->page = upage;
@@ -180,18 +168,22 @@ bool add_mmap(struct file *file, int32_t offset, uint8_t *upage, uint32_t rbytes
         spte->loaded = false;
         spte->type = MMAP;
 	spte->pin = false;
-
-	if(!process_add_mmap(spte))
+	
+	struct mmap_file *mm = malloc(sizeof(struct mmap_file));
+	if(mm == NULL)
 	{
 		free(spte);
 		return false;
 	}
+	mm->spte = spte;
+        mm->mmap_count = thread_current()->mmap_count;
+        list_push_back(&thread_current()->mmap_list, &mm->elem);
 
         if(hash_insert(&thread_current()->supt, &spte->elem) == NULL)
 		return true;
 	else
 	{
-		spte->type = HASH_ERROR;
+		spte->destroy = true;
                 return false;
 	}
 }
@@ -200,9 +192,11 @@ bool page_stack_growth (void* uaddr)
 {
 	if((size_t) (PHYS_BASE - pg_round_down(uaddr)) > STACK_MAX)
 		return false;
+
 	struct sup_entry *spte = malloc(sizeof(struct sup_entry));
 	if(spte == NULL)
 		return false;
+	spte->destroy = false;
 	spte->page = pg_round_down(uaddr);
 	spte->loaded = true;
 	spte->writable = true;
@@ -221,9 +215,6 @@ bool page_stack_growth (void* uaddr)
       		frame_free(frame);
       		return false;
     	}
-
-	if (intr_context())
-		spte->pin = false;
 	
 	if(hash_insert(&thread_current()->supt, &spte->elem) == NULL)
                 return true;

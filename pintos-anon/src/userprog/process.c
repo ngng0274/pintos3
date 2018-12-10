@@ -40,19 +40,15 @@ process_execute (const char *file_name)
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
-	/*if (is_user_vaddr(file_name))
-	  {
-	  file_name = pagedir_get_page(thread_current()->pagedir, file_name);
-	  }*/
+
 	char* save_ptr;
 	char file_name_[256];
 	strlcpy (file_name_, file_name, strlen(file_name) + 1);
 	strtok_r(file_name_, " ", &save_ptr);
 
-	if (filesys_open(file_name_) == NULL) {
+	if (filesys_open(file_name_) == NULL)
 		return -1; 
 
-	}
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (file_name_, PRI_DEFAULT, start_process, fn_copy);
 	sema_down(&thread_current()->load_lock);
@@ -157,7 +153,6 @@ process_exit (void)
 {
 	struct thread *cur = thread_current ();
 	uint32_t *pd;
-	process_remove_mmap(-1);
 	page_table_destroy(&cur->supt);
 	/* Destroy the current process's page directory and switch back
 	   to the kernel-only page directory. */
@@ -283,6 +278,7 @@ load (const char *file_name, void (**eip) (void), void **esp, char** save_ptr, i
 		goto done;
 	process_activate ();
 	/* Open executable file. */
+
 	file = filesys_open (file_name);
 	if (file == NULL) 
 	{
@@ -369,7 +365,7 @@ load (const char *file_name, void (**eip) (void), void **esp, char** save_ptr, i
 	success = true;
 done:
 	/* We arrive here whether the load is successful or not. */
-	//file_close (file);
+
 	return success;
 }
 
@@ -521,74 +517,4 @@ bool install_page (void *upage, void *kpage, bool writable)
 	   address, then map our page there. */
 	return (pagedir_get_page (t->pagedir, upage) == NULL
 			&& pagedir_set_page (t->pagedir, upage, kpage, writable));
-}
-
-bool process_add_mmap(struct sup_entry *spte)
-{
-	struct mmap_file *mm = malloc(sizeof(struct mmap_file));
-
-	if(mm == NULL)
-		return false;
-
-	mm->spte = spte;
-	mm->mmap_count = thread_current()->mmap_count;
-	list_push_back(&thread_current()->mmap_list, &mm->elem);
-
-	return true;
-}
-
-void process_remove_mmap(int mapping)
-{
-	struct thread *t = thread_current();
-	struct list_elem *next;
-	struct list_elem *e = list_begin(&t->mmap_list);
-	struct file *f = NULL;
-	int close = 0;
-	while (e != list_end(&t->mmap_list))
-	{
-		next = list_next(e);
-
-		struct mmap_file *mm = list_entry (e, struct mmap_file, elem);
-
-		if (mm->mmap_count == mapping || mapping == -1)
-		{	
-			mm->spte->pin =true;
-			if (mm->spte->loaded)
-			{
-				if (pagedir_is_dirty(t->pagedir, mm->spte->page))
-				{
-					lock_acquire(&file_lock);
-					file_write_at(mm->spte->file, mm->spte->page, mm->spte->read_bytes, mm->spte->offset);
-					lock_release(&file_lock);
-				}
-
-				frame_free(pagedir_get_page(t->pagedir, mm->spte->page));
-				pagedir_clear_page(t->pagedir, mm->spte->page);
-			}
-			if(mm->spte->type != HASH_ERROR)
-				hash_delete(&t->supt, &mm->spte->elem);
-			list_remove(&mm->elem);
-			if(mm->mmap_count != close)
-			{
-				if(f)
-				{
-					lock_acquire(&file_lock);
-					file_close(f);
-					lock_release(&file_lock);
-				}
-				close = mm->mmap_count;
-				f =mm->spte->file;
-			}
-			free(mm->spte);
-			free(mm);
-		}
-
-		e = next;
-	}
-	if(f)
-	{
-		lock_acquire(&file_lock);
-                file_close(f);
-                lock_release(&file_lock);
-	}
 }

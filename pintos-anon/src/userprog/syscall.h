@@ -10,8 +10,16 @@
 #include "vm/page.h"
 
 typedef int pid_t;
+typedef int mapid_t;
 
 struct lock file_lock;
+
+struct mmap_file
+{
+        struct sup_entry *spte;
+        int mmap_count;
+        struct list_elem elem;
+};
 
 struct file_
 {
@@ -40,15 +48,12 @@ int write (int fd, const void *buffer, unsigned size);
 void seek (int fd, unsigned position);
 unsigned tell (int fd);
 void close (int fd);
-int mmap (int fd, void *addr);
+mapid_t mmap (int fd, void *addr);
 void munmap (int mapping);
 struct sup_entry* check_addr(const void* vaddr, void* esp);
 void check_buffer(void* buffer, unsigned size, void* esp, bool to_write);
-void check_string(const void* str, void* esp);
-
-
+void check_str(const void* str, void* esp);
 void unpin_addr(void* vaddr);
-void unpin_string(void* str);
+void unpin_str(void* str);
 void unpin_buffer(void* buffer, unsigned size);
-
 #endif /* userprog/syscall.h */
