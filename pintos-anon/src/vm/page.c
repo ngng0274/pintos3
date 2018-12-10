@@ -135,7 +135,7 @@ bool load_swap(struct sup_entry *spte)
                 return false;
         }
 
-	swap_in(spte->swap_index, frame);
+	swap_in(spte->swap_index, spte->page);
 
         spte->loaded = true;
         return true;

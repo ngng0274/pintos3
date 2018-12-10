@@ -30,7 +30,6 @@ struct sup_entry
 
 void page_table_init(struct hash *supt);
 void page_table_destroy(struct hash *supt);
-
 bool load_page(struct sup_entry *spte);
 bool load_file(struct sup_entry *spte);
 bool load_swap(struct sup_entry *spte);

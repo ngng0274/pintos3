@@ -318,9 +318,7 @@ syscall_handler (struct intr_frame *f)
 			check_addr((const void*) f->esp+4,(const void*) f->esp);
 			check_string((const void*) f->esp+4,(const void*) f->esp);
 			f->eax = exec((const char *)*(uint32_t *)(f->esp + 4));
-
 			unpin_string((const void*) f->esp+4);
-
 			break;
 		case SYS_WAIT:
 			check_addr((const void*) f->esp+4,(const void*) f->esp);
@@ -331,7 +329,6 @@ syscall_handler (struct intr_frame *f)
 			check_addr((const void*) f->esp+20,(const void*) f->esp);
 			check_string((const void*) f->esp+16,(const void*) f->esp);
 			f->eax = create((const char *)*(uint32_t *)(f->esp + 16), (unsigned)*(uint32_t *)(f->esp + 20));
-
 			unpin_string((const void*) f->esp+16);
 			
 			break;
@@ -344,9 +341,7 @@ syscall_handler (struct intr_frame *f)
 			check_addr((const void*) f->esp+4,(const void*) f->esp);
 			check_string((const void*) f->esp+4,(const void*) f->esp);
 			f->eax = open((const char *)*(uint32_t *)(f->esp + 4));
-
 			unpin_string((const void*) f->esp+4);
-
 			break;
 		case SYS_FILESIZE:
 			check_addr((const void*) f->esp+4,(const void*) f->esp);
@@ -358,9 +353,7 @@ syscall_handler (struct intr_frame *f)
 			check_addr((const void*) f->esp+28,(const void*) f->esp);
 			check_buffer((void *)*(uint32_t *)(f->esp + 24), (unsigned)*(uint32_t *)(f->esp + 28),(const void*) f->esp, true);
 			f->eax = read((int)*(uint32_t *)(f->esp + 20), (void *)*(uint32_t *)(f->esp + 24), (unsigned)*(uint32_t *)(f->esp + 28));
-
 			unpin_buffer((void *)*(uint32_t *)(f->esp + 24), (unsigned)*(uint32_t *)(f->esp + 28));
-
 			break;
 		case SYS_WRITE:
 			check_addr((const void*) f->esp+20,(const void*) f->esp);
@@ -388,47 +381,30 @@ syscall_handler (struct intr_frame *f)
 		case SYS_MMAP:
 			check_addr((const void*) f->esp+16,(const void*) f->esp);
 			check_addr((const void*) f->esp+20,(const void*) f->esp);
-
 			f->eax = mmap((int)*(uint32_t *)(f->esp + 16), (void *)*(uint32_t *)(f->esp + 20));
 			break;
 		case SYS_MUNMAP:
 			check_addr((const void*) f->esp+4,(const void*) f->esp);
 			munmap(*(uint32_t *)(f->esp + 4));
 			break;
-	} 
-
+	}
 	unpin_addr((const void*) f->esp);
 }
 
 struct sup_entry* check_addr(const void* vaddr, void* esp)
 {
 	if(!is_user_vaddr(vaddr) || vaddr < ((void*) 0x08048000))
-	{
-	//	printf("\n1\n");
 		exit(-1);
-	}
+
 	bool load = false;
 	struct sup_entry* spte = find_spte((void*) vaddr);
-/*
-	if(spte == NULL)
-	{
-	//	printf("\n2\n");
-		exit(-1);
-	}
-*/
+
 	if (spte)
 	{	
 		load_page(spte);
-
 		load = spte->loaded;
 	}
-/*
-	if(!spte->loaded)
-	{
-	//	printf("\n3\n");
-		exit(-1);
-	}
-*/
+
 	else if (vaddr >= esp - 32)
 		load = page_stack_growth((void *) vaddr);
 
