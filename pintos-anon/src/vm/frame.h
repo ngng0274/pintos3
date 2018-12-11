@@ -22,14 +22,11 @@ struct frame_table_entry
 	struct list_elem elem;
 
 	struct thread *owner;
-
-	//bool pin;
 };
 
 void frame_init();
 void* frame_allocate(enum palloc_flags flags, struct sup_entry *spte);
 void frame_free(void *frame);
 void* frame_evict(enum palloc_flags flags);
-//void* find_frame(struct sup_entry *spte);
 
 #endif

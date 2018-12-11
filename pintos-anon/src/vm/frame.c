@@ -16,8 +16,6 @@ void* frame_allocate(enum palloc_flags flags, struct sup_entry *spte) {
 	if((flags & PAL_USER) == 0)
 		return NULL;
 		
-//	lock_acquire(&frame_lock);
-
 	void *frame = palloc_get_page(flags);
 
 
@@ -123,18 +121,3 @@ void* frame_evict(enum palloc_flags flags) {
 	}
 }
 
-/*
-void* find_frame(struct sup_entry *to_find)
-{
-	struct list_elem *e = list_begin(&frame_table);
-
-	while(e != list_end(&frame_table))
-	{
-		if(to_find == e
-
-
-		e = e->next;
-	}
-
-};
-*/
