@@ -313,7 +313,8 @@ void munmap(int mapping)
 	struct list_elem *e = list_begin(&t->mmap_list);
 	struct file *f = NULL;
 	int close = 0;
-	while (e != list_end(&t->mmap_list))
+	
+	for (e; e != list_end(&t->mmap_list); e = next)
 	{
 		next = e->next;
 
@@ -351,8 +352,6 @@ void munmap(int mapping)
                         free(mm->spte);
                         free(mm);
                 }
-
-                e = next;
         }
         if(f)
         {

@@ -153,6 +153,7 @@ process_exit (void)
 {
 	struct thread *cur = thread_current ();
 	uint32_t *pd;
+
 	page_table_destroy(&cur->supt);
 	/* Destroy the current process's page directory and switch back
 	   to the kernel-only page directory. */
@@ -172,6 +173,8 @@ process_exit (void)
 	}
 	sema_up(&(cur->child_lock));
         sema_down(&(cur->mem_lock));
+
+	
 }
 
 /* Sets up the CPU for running user code in the current
